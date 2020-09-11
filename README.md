@@ -27,6 +27,7 @@ Testing Overview
 I didn't do formal unit testing for this project. Instead, I called the program with different combinations of inputs and manually verified that it behaved as expected in each case. 
 
 Sources Consulted
+
 Beej's Guide to Network Programming 
 Socket Programming in Python (realpython.com/python-sockets/#socket-api-overview)
 TLS/SSL wrapper Python documentation (docs.python.org/3/library/ssl.html)
