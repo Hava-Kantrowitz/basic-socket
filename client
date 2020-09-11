@@ -1,0 +1,133 @@
+#!/usr/bin/env python
+
+import socket
+import argparse 
+import ssl
+
+#This method handles command line parsing and uses it to set the values for the 
+#port, SSL, hostname, and neu_id fields according to specifications
+def init_parsing():
+	parser = argparse.ArgumentParser(description='test')
+	parser.add_argument("-p", help='Optional port')
+	parser.add_argument("-s", help='Optional SSL', action='store_true')
+	parser.add_argument("hostname", help='Name of Host')
+	parser.add_argument("neu_id", help='NEU ID')
+	args = parser.parse_args()
+	port = 27993
+	usesSSL = False
+	if args.s:
+		usesSSL = True
+		port = 27994
+	if args.p:
+		port = args.p
+	if not args.hostname or not args.neu_id:
+		print("Error. Please provide both a hostname and NEU ID.")
+		return -1
+	hostname = args.hostname
+	neu_id = args.neu_id
+	arg_list = [port, usesSSL, hostname, neu_id]
+	return arg_list
+
+#This method receives the already created socket and the message going to the socket and sends the message. It keeps reading the message
+#until it sees the newline delimiter, at which point it splits the message at its spaces places each part of the message in a list to return
+def get_data(sock, message):
+	sock.sendall(message)
+	data = ""
+	while True:
+		result = sock.recv(8192)
+		data = data + result.decode("ascii")
+		if data.endswith("\n"):
+			#print("made it here")
+			return data.split(" ") 
+		else:
+			#print("no end")
+			#print(data) 
+			continue
+	
+
+#This method receives the already created socket and the count of the previous FIND message. It sends the COUNT message and handles the response. 
+#It returns an error code of -1 if it receives malformed data from the server, and zero otherwise. 
+def next_protocol(sock, count):
+	message = "cs3700fall2020 COUNT " + str(count) + "\n"
+	#print(message)
+	data = get_data(sock, message)
+	if "cs3700fall2020" not in data[0]:
+		print(data[-1])
+		print("Error, malformed data received from server")
+		return -1
+	elif "FIND" in data[1]: 
+		#print("a find")
+		randomChar = data[3]
+		#print(randomChar[-1]) 
+		count = get_count(data)
+		protocol = next_protocol(sock, count)
+		return protocol
+	elif "BYE" in data[1]:
+		data = data[2].split("\n")
+		#print(data)
+		print(data[0])
+		sock.close()
+		return 0 
+	else: 
+		#print(data)
+		print("Error, malformed data received from server")
+		return -1 
+
+#This method receives the port, whether it's SSL, the hostname, and the neu_id. It creates the socket and sends the HELLO message.
+#If it encounters an issue in handling the incoming or outgoing message, it returns an error of -1
+def run_protocol(port, usesSSL, hostname, neu_id):
+	#print("{0}, {1}, {2}, {3}".format(port, usesSSL, hostname, neu_id))
+	#first socket message
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	if usesSSL:
+		#print(hostname) 
+		context = ssl._create_unverified_context()
+		sock = context.wrap_socket(sock, server_hostname=hostname) 
+	sock.connect((hostname, port))
+	message = "cs3700fall2020 HELLO " + neu_id + "\n"
+	data = get_data(sock, message)
+	#print(data)
+	count = get_count(data) 
+	protocol = next_protocol(sock, count)
+	return protocol
+
+#This method gets the list of data as given by the server and finds the count of the given symbol. Because we split 
+#the data into a list using spaces as a delimiter, we need to make sure to handle the cases where a space is the symbol 
+#or when it's in the string of random data. Returns the count of the symbol within the random string. 
+def get_count(data):
+	#print(data)
+	numSpaces = len(data)
+	symbol = data[2]
+	randomChars = data[3]
+	#if there are spaces in the message we need to stitch it back together because we used spaces as delimiter
+	if numSpaces > 4:
+		i = 4
+		while i < numSpaces:
+			randomChars = randomChars + data[i]
+	#print(symbol)
+	#print(randomChars)
+	count = 0
+	for char in randomChars:
+		if char is symbol:
+			#print(char)
+			count = count + 1
+	#if we're looking for spaces we can just see how many times we split, because spaces were our delimiter
+	if symbol is " ":
+		count = numSpaces - 4
+	
+	#now we have our count
+	return count
+	
+
+#Main method to run the client 
+def main():
+	arg_list = init_parsing()
+	#get individual arguments 
+	port = int(arg_list[0])
+	usesSSL = arg_list[1]
+	hostname = arg_list[2]
+	neu_id = arg_list[3]
+	client = run_protocol(port, usesSSL, hostname, neu_id)
+	return client
+
+main()
